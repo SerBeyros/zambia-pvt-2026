@@ -318,8 +318,8 @@
         </div>
     </div>
 
-    <!-- Detail Modal -->
-    <div id="detailModal" class="modal hidden">
+    <!-- Detail Modal (Hidden by default) -->
+    <div id="detailModal" class="modal hidden" style="display: none;">
         <div class="modal-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2 style="margin: 0;">Submission Details</h2>
@@ -523,8 +523,15 @@
         }
 
         function closeModal() {
-            document.getElementById('detailModal').classList.add('hidden');
+            const modal = document.getElementById('detailModal');
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
         }
+        
+        // Ensure modal is closed on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            closeModal();
+        });
 
         async function approve(id) {
             if (!confirm('Approve this submission?')) return;
