@@ -233,8 +233,8 @@
         <div class="login-container">
             <div class="card">
                 <h2>Admin Login</h2>
-                <input type="text" id="username" placeholder="Username">
-                <input type="password" id="password" placeholder="Password">
+                <input type="text" id="username" placeholder="Username" value="admin">
+                <input type="password" id="password" placeholder="Password" value="admin2026">
                 <button onclick="login()" style="width: 100%; background: #1e3c72; color: white; padding: 12px;">Login</button>
                 <div id="loginError" style="color: red; margin-top: 10px; font-size: 14px;"></div>
             </div>
@@ -330,7 +330,9 @@
     </div>
 
     <script>
-        const API_URL = ' https://zambia-pvt-2026.onrender.com/api';
+        // IMPORTANT: Use YOUR actual Render backend URL
+        const API_URL = 'https://zambia-pvt-2026.onrender.com/api';
+        
         let token = null;
         let currentUser = null;
 
@@ -342,7 +344,10 @@
             try {
                 const res = await fetch(`${API_URL}/login`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify({ username, password })
                 });
                 
@@ -501,7 +506,7 @@
                     </div>
                     
                     <div class="result-section">
-                        <h3>🏘️ Council Results</h3>
+                        <h3>🏙️ Council Results</h3>
                         ${data.council.map(c => `
                             <div class="result-item">
                                 <strong>${c.candidate}</strong> (${c.party}): <strong>${c.votes.toLocaleString()} votes</strong>
