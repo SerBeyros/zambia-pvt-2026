@@ -474,9 +474,18 @@
         async function viewDetails(id) {
             try {
                 const res = await fetch(`${API_URL}/submissions/${id}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/json'
+                    }
                 });
+                
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                
                 const data = await res.json();
+                console.log('Submission data:', data); // Debug log
                 
                 let html = `
                     <div style="margin-bottom: 20px;">
@@ -485,40 +494,56 @@
                         <p><strong>Observer:</strong> ${data.observer_name} (${data.observer_phone})</p>
                         <p><strong>GPS:</strong> ${data.gps_lat.toFixed(6)}, ${data.gps_lon.toFixed(6)}</p>
                         <p><strong>Status:</strong> <span class="status status-${data.status}">${data.status.toUpperCase()}</span></p>
+                        <p><strong>Submitted:</strong> ${new Date(data.submitted_at).toLocaleString()}</p>
                     </div>
                     
                     <div class="result-section">
                         <h3>🏛️ Presidential Results</h3>
-                        ${data.presidential.map(c => `
+                        ${data.presidential && data.presidential.length > 0 ? data.presidential.map(c => `
                             <div class="result-item">
                                 <strong>${c.candidate}</strong> (${c.party}): <strong>${c.votes.toLocaleString()} votes</strong>
                             </div>
-                        `).join('')}
+                        `).join('') : '<p>No presidential results</p>'}
                     </div>
                     
                     <div class="result-section">
                         <h3>🏢 Parliamentary Results</h3>
-                        ${data.parliamentary.map(c => `
+                        ${data.parliamentary && data.parliamentary.length > 0 ? data.parliamentary.map(c => `
                             <div class="result-item">
                                 <strong>${c.candidate}</strong> (${c.party}): <strong>${c.votes.toLocaleString()} votes</strong>
                             </div>
-                        `).join('')}
+                        `).join('') : '<p>No parliamentary results</p>'}
                     </div>
                     
                     <div class="result-section">
                         <h3>🏙️ Council Results</h3>
-                        ${data.council.map(c => `
+                        ${data.council && data.council.length > 0 ? data.council.map(c => `
                             <div class="result-item">
                                 <strong>${c.candidate}</strong> (${c.party}): <strong>${c.votes.toLocaleString()} votes</strong>
                             </div>
-                        `).join('')}
+                        `).join('') : '<p>No council results</p>'}
                     </div>
+                    
+                    ${data.photos && data.photos.length > 0 ? `
+                        <div class="result-section">
+                            <h3>📸 Photos</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                                ${data.photos.map(photo => `
+                                    <img src="${photo}" style="width: 100%; border-radius: 5px; border: 1px solid #e0e0e0;" />
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
                 `;
                 
                 document.getElementById('detailContent').innerHTML = html;
-                document.getElementById('detailModal').classList.remove('hidden');
+                const modal = document.getElementById('detailModal');
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex';
             } catch (error) {
-                alert('Failed to load details');
+                console.error('Failed to load details:', error);
+                alert('Failed to load details: ' + error.message);
+                closeModal();
             }
         }
 
