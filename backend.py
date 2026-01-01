@@ -16,8 +16,16 @@ import traceback
 
 app = Flask(__name__, static_folder='.')
 
-# Simple CORS configuration - allows all origins
-CORS(app, resources={r"/*": {"origins": "*"}})
+# CORS configuration - simple and working
+CORS(app)
+
+# Add after_request handler for additional CORS headers
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'zambia-pvt-2026-production-key')
 DB_NAME = 'zambia_pvt_2026.db'
@@ -190,6 +198,10 @@ def load_stations():
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Allow OPTIONS requests without authentication
+        if request.method == 'OPTIONS':
+            return '', 200
+            
         token = request.headers.get('Authorization')
         if not token:
             return jsonify({'error': 'Token missing'}), 401
@@ -334,7 +346,7 @@ def login():
 @token_required
 def get_provinces(current_user):
     if request.method == 'OPTIONS':
-        return '', 204
+        return '', 200
     
     try:
         conn = sqlite3.connect(DB_NAME)
