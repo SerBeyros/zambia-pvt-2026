@@ -16,15 +16,8 @@ import traceback
 
 app = Flask(__name__, static_folder='.')
 
-# Enhanced CORS configuration
-CORS(app, 
-     resources={r"/*": {"origins": "*"}},
-     allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     expose_headers=["Content-Type", "Authorization"],
-     supports_credentials=True,
-     send_wildcard=True,
-     max_age=3600)
+# Simple CORS configuration - allows all origins
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'zambia-pvt-2026-production-key')
 DB_NAME = 'zambia_pvt_2026.db'
