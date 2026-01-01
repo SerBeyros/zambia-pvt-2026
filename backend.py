@@ -1,6 +1,7 @@
 """
 Zambia PVT 2026 - Complete Production Backend
 Free deployment ready for Render.com
+FIXED: Database initialization runs automatically
 """
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -14,7 +15,11 @@ import json
 import os
 
 app = Flask(__name__, static_folder='.')
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     supports_credentials=True)
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'zambia-pvt-2026-production-key')
 DB_NAME = 'zambia_pvt_2026.db'
@@ -199,6 +204,28 @@ def token_required(f):
             return jsonify({'error': 'Invalid token'}), 401
     
     return decorated
+
+# ==================== INITIALIZE ON STARTUP ====================
+print("=" * 70)
+print("🗳️  ZAMBIA PVT 2026 - INITIALIZING...")
+print("=" * 70)
+
+# This runs when the module is imported by Gunicorn
+init_database()
+load_stations()
+
+conn = sqlite3.connect(DB_NAME)
+c = conn.cursor()
+c.execute("SELECT COUNT(*) FROM stations")
+station_count = c.fetchone()[0]
+c.execute("SELECT COUNT(*) FROM users")
+user_count = c.fetchone()[0]
+conn.close()
+
+print(f"✅ Database initialized")
+print(f"   Stations: {station_count:,}")
+print(f"   Users: {user_count}")
+print("=" * 70)
 
 # ==================== ROUTES ====================
 
@@ -511,24 +538,5 @@ def get_stats(current_user):
     })
 
 if __name__ == '__main__':
-    print("=" * 70)
-    print("🗳️  ZAMBIA PVT 2026 - PRODUCTION BACKEND")
-    print("=" * 70)
-    
-    init_database()
-    load_stations()
-    
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM stations")
-    station_count = c.fetchone()[0]
-    conn.close()
-    
-    print(f"\n✅ System Ready")
-    print(f"   Polling Stations: {station_count:,}")
-    print(f"   Accounts: observer1-3 / obs2026, admin / admin2026")
-    print(f"   API: http://0.0.0.0:5000")
-    print("=" * 70)
-    
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
