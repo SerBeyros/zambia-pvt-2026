@@ -15,8 +15,17 @@
     <div id="app"></div>
 
     <script>
-        // Configuration - CHANGE THIS to your Render backend URL
-        const API_URL = 'https://zambia-pvt-2026.onrender.com/api';
+        // IMPORTANT: Replace with YOUR actual Render backend URL
+        const API_URL = ' https://zambia-pvt-2026.onrender.com/api';
+        
+        // Debug mode - logs all requests
+        const DEBUG = true;
+        
+        function logDebug(message, data) {
+            if (DEBUG) {
+                console.log(`[DEBUG] ${message}`, data || '');
+            }
+        }
         
         let state = {
             screen: 'login',
@@ -45,20 +54,30 @@
         // API Functions
         async function login() {
             setState({ error: '', loading: true });
+            logDebug('Attempting login', { username: state.credentials.username });
+            
             try {
                 const res = await fetch(`${API_URL}/login`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify(state.credentials)
                 });
+                
+                logDebug('Login response status', res.status);
+                
                 const data = await res.json();
+                logDebug('Login response data', data);
                 
                 if (!res.ok) throw new Error(data.error || 'Login failed');
                 
                 setState({ token: data.token, user: data.user, screen: 'home', loading: false });
                 loadProvinces();
             } catch (err) {
-                setState({ error: err.message, loading: false });
+                logDebug('Login error', err);
+                setState({ error: `Login failed: ${err.message}. Check console for details.`, loading: false });
             }
         }
 
@@ -159,11 +178,20 @@
             }
             
             setState({ loading: true });
+            logDebug('Submitting results', {
+                station_id: state.selectedStation,
+                gps: state.gpsData,
+                presidential: validPresidential.length,
+                parliamentary: validParliamentary.length,
+                council: validCouncil.length
+            });
+            
             try {
                 const res = await fetch(`${API_URL}/submit`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'Authorization': `Bearer ${state.token}`
                     },
                     body: JSON.stringify({
@@ -177,7 +205,10 @@
                     })
                 });
                 
+                logDebug('Submit response status', res.status);
+                
                 const data = await res.json();
+                logDebug('Submit response data', data);
                 
                 if (!res.ok) throw new Error(data.error || 'Submission failed');
                 
@@ -185,7 +216,8 @@
                 resetForm();
                 setState({ screen: 'home', loading: false });
             } catch (err) {
-                setState({ error: err.message, loading: false });
+                logDebug('Submit error', err);
+                setState({ error: `Submission failed: ${err.message}. Check backend is running.`, loading: false });
             }
         }
 
