@@ -3,18 +3,494 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zambia PVT 2026 Observer</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta name="theme-color" content="#1e3c72">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Zambia PVT 2026 - Observer App</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+    </style>
 </head>
-<body>
-    <div id="root"></div>
-    <script type="text/babel">
-        // Copy the React component code from the first artifact here
-        // Then add: const root = ReactDOM.createRoot(document.getElementById('root'));
-        // root.render(<ZambiaPVTApp />);
+<body class="bg-gray-50">
+    <div id="app"></div>
+
+    <script>
+        // Configuration - CHANGE THIS to your Render backend URL
+        const API_URL = 'https://zambia-pvt-2026.onrender.com/api';
+        
+        let state = {
+            screen: 'login',
+            token: null,
+            user: null,
+            provinces: [],
+            stations: [],
+            submissions: [],
+            loading: false,
+            credentials: { username: 'observer1', password: 'obs2026' },
+            selectedProvince: '',
+            selectedStation: '',
+            gpsData: null,
+            photos: [],
+            presidential: [{ candidate: '', party: '', votes: 0 }],
+            parliamentary: [{ candidate: '', party: '', votes: 0 }],
+            council: [{ candidate: '', party: '', votes: 0 }],
+            error: ''
+        };
+
+        function setState(updates) {
+            state = { ...state, ...updates };
+            render();
+        }
+
+        // API Functions
+        async function login() {
+            setState({ error: '', loading: true });
+            try {
+                const res = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(state.credentials)
+                });
+                const data = await res.json();
+                
+                if (!res.ok) throw new Error(data.error || 'Login failed');
+                
+                setState({ token: data.token, user: data.user, screen: 'home', loading: false });
+                loadProvinces();
+            } catch (err) {
+                setState({ error: err.message, loading: false });
+            }
+        }
+
+        async function loadProvinces() {
+            try {
+                const res = await fetch(`${API_URL}/provinces`, {
+                    headers: { 'Authorization': `Bearer ${state.token}` }
+                });
+                const data = await res.json();
+                setState({ provinces: data.provinces || [] });
+            } catch (err) {
+                console.error('Failed to load provinces');
+            }
+        }
+
+        async function loadStations(province) {
+            setState({ selectedProvince: province, stations: [] });
+            if (!province) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/stations?province=${encodeURIComponent(province)}`, {
+                    headers: { 'Authorization': `Bearer ${state.token}` }
+                });
+                const data = await res.json();
+                setState({ stations: data.stations || [] });
+            } catch (err) {
+                console.error('Failed to load stations');
+            }
+        }
+
+        function captureGPS() {
+            if (!navigator.geolocation) {
+                setState({ error: 'GPS not supported on this device' });
+                return;
+            }
+            
+            setState({ loading: true });
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setState({
+                        gpsData: {
+                            lat: position.coords.latitude,
+                            lon: position.coords.longitude
+                        },
+                        loading: false,
+                        error: ''
+                    });
+                },
+                (err) => {
+                    setState({ error: 'GPS capture failed. Enable location services.', loading: false });
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        function handlePhoto(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setState({ photos: [...state.photos, e.target.result] });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function addCandidate(type) {
+            const current = state[type];
+            setState({ [type]: [...current, { candidate: '', party: '', votes: 0 }] });
+        }
+
+        function updateCandidate(type, index, field, value) {
+            const updated = [...state[type]];
+            updated[index][field] = field === 'votes' ? parseInt(value) || 0 : value;
+            setState({ [type]: updated });
+        }
+
+        async function submitResults() {
+            setState({ error: '' });
+            
+            if (!state.selectedStation) {
+                setState({ error: 'Please select a polling station' });
+                return;
+            }
+            
+            if (!state.gpsData) {
+                setState({ error: 'Please capture GPS location' });
+                return;
+            }
+            
+            const validPresidential = state.presidential.filter(c => c.candidate && c.party);
+            const validParliamentary = state.parliamentary.filter(c => c.candidate && c.party);
+            const validCouncil = state.council.filter(c => c.candidate && c.party);
+            
+            if (validPresidential.length === 0 || validParliamentary.length === 0 || validCouncil.length === 0) {
+                setState({ error: 'Please enter at least one candidate for each election type' });
+                return;
+            }
+            
+            setState({ loading: true });
+            try {
+                const res = await fetch(`${API_URL}/submit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${state.token}`
+                    },
+                    body: JSON.stringify({
+                        station_id: parseInt(state.selectedStation),
+                        gps_lat: state.gpsData.lat,
+                        gps_lon: state.gpsData.lon,
+                        presidential: validPresidential,
+                        parliamentary: validParliamentary,
+                        council: validCouncil,
+                        photos: state.photos
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (!res.ok) throw new Error(data.error || 'Submission failed');
+                
+                alert('✅ Results submitted successfully!');
+                resetForm();
+                setState({ screen: 'home', loading: false });
+            } catch (err) {
+                setState({ error: err.message, loading: false });
+            }
+        }
+
+        function resetForm() {
+            setState({
+                selectedProvince: '',
+                selectedStation: '',
+                gpsData: null,
+                photos: [],
+                presidential: [{ candidate: '', party: '', votes: 0 }],
+                parliamentary: [{ candidate: '', party: '', votes: 0 }],
+                council: [{ candidate: '', party: '', votes: 0 }],
+                error: ''
+            });
+        }
+
+        async function loadSubmissions() {
+            try {
+                const res = await fetch(`${API_URL}/submissions`, {
+                    headers: { 'Authorization': `Bearer ${state.token}` }
+                });
+                const data = await res.json();
+                setState({ submissions: data.submissions || [], screen: 'submissions' });
+            } catch (err) {
+                setState({ error: 'Failed to load submissions' });
+            }
+        }
+
+        function logout() {
+            setState({
+                token: null,
+                user: null,
+                screen: 'login',
+                selectedProvince: '',
+                selectedStation: '',
+                gpsData: null,
+                photos: [],
+                presidential: [{ candidate: '', party: '', votes: 0 }],
+                parliamentary: [{ candidate: '', party: '', votes: 0 }],
+                council: [{ candidate: '', party: '', votes: 0 }],
+                error: ''
+            });
+        }
+
+        // Render Functions
+        function renderLogin() {
+            return `
+                <div class="min-h-screen bg-gradient-to-br from-blue-900 to-blue-700">
+                    <div class="p-6">
+                        <div class="text-center text-white mb-8 mt-12">
+                            <h1 class="text-3xl font-bold mb-2">🗳️ Zambia PVT 2026</h1>
+                            <p class="text-blue-200">Election Monitoring System</p>
+                        </div>
+                        
+                        <div class="bg-white rounded-2xl p-6 max-w-md mx-auto shadow-2xl">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4">Observer Login</h2>
+                            
+                            <input
+                                type="text"
+                                id="username"
+                                placeholder="Username"
+                                value="${state.credentials.username}"
+                                class="w-full p-4 border-2 border-gray-200 rounded-lg mb-4 text-lg"
+                            />
+                            
+                            <input
+                                type="password"
+                                id="password"
+                                placeholder="Password"
+                                value="${state.credentials.password}"
+                                class="w-full p-4 border-2 border-gray-200 rounded-lg mb-4 text-lg"
+                            />
+                            
+                            ${state.error ? `
+                                <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                                    ${state.error}
+                                </div>
+                            ` : ''}
+                            
+                            <button
+                                onclick="login()"
+                                ${state.loading ? 'disabled' : ''}
+                                class="w-full bg-blue-600 text-white p-4 rounded-lg font-semibold text-lg hover:bg-blue-700 disabled:bg-gray-400"
+                            >
+                                ${state.loading ? 'Logging in...' : 'Login'}
+                            </button>
+                            
+                            <div class="mt-4 text-sm text-gray-600 text-center">
+                                <p>Demo: observer1 / obs2026</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderHome() {
+            return `
+                <div class="min-h-screen bg-gray-50">
+                    <div class="bg-gradient-to-r from-blue-900 to-blue-700 text-white p-6 shadow-lg">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h1 class="text-2xl font-bold">🗳️ Zambia PVT 2026</h1>
+                                <p class="text-blue-200 text-sm">${state.user?.full_name}</p>
+                            </div>
+                            <button onclick="logout()" class="p-2 hover:bg-blue-800 rounded-lg">
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 space-y-4">
+                        <button
+                            onclick="setState({ screen: 'submit' })"
+                            class="w-full bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition"
+                        >
+                            <div class="text-left">
+                                <div class="font-semibold text-lg">📝 Submit New Results</div>
+                                <div class="text-gray-500 text-sm">Enter polling station data</div>
+                            </div>
+                        </button>
+                        
+                        <button
+                            onclick="loadSubmissions()"
+                            class="w-full bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition"
+                        >
+                            <div class="text-left">
+                                <div class="font-semibold text-lg">📋 My Submissions</div>
+                                <div class="text-gray-500 text-sm">View submitted results</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSubmissions() {
+            return `
+                <div class="min-h-screen bg-gray-50">
+                    <div class="bg-gradient-to-r from-blue-900 to-blue-700 text-white p-6 shadow-lg">
+                        <h1 class="text-2xl font-bold">My Submissions</h1>
+                    </div>
+                    
+                    <div class="p-6 space-y-4">
+                        ${state.submissions.length === 0 ? `
+                            <div class="bg-white p-8 rounded-xl text-center text-gray-500">
+                                No submissions yet
+                            </div>
+                        ` : state.submissions.map(sub => `
+                            <div class="bg-white p-4 rounded-xl shadow-md">
+                                <div class="font-semibold text-lg">${sub.code} - ${sub.name}</div>
+                                <div class="text-gray-600 text-sm">${sub.province}</div>
+                                <div class="mt-2">
+                                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                                        sub.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                        sub.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-red-100 text-red-800'
+                                    }">
+                                        ${sub.status.toUpperCase()}
+                                    </span>
+                                </div>
+                                <div class="text-gray-400 text-xs mt-2">
+                                    ${new Date(sub.submitted_at).toLocaleString()}
+                                </div>
+                            </div>
+                        `).join('')}
+                        
+                        <button
+                            onclick="setState({ screen: 'home' })"
+                            class="w-full bg-gray-600 text-white p-4 rounded-lg font-semibold"
+                        >
+                            Back to Home
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSubmit() {
+            return `
+                <div class="min-h-screen bg-gray-50 pb-20">
+                    <div class="bg-gradient-to-r from-blue-900 to-blue-700 text-white p-6 shadow-lg">
+                        <h1 class="text-2xl font-bold">Submit Results</h1>
+                    </div>
+                    
+                    <div class="p-6 space-y-6">
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-lg font-semibold mb-4">Select Polling Station</h2>
+                            
+                            <label class="block text-sm font-medium mb-2">Province</label>
+                            <select id="provinceSelect" onchange="loadStations(this.value)" class="w-full p-3 border-2 rounded-lg mb-4">
+                                <option value="">Select province</option>
+                                ${state.provinces.map(p => `
+                                    <option value="${p}" ${state.selectedProvince === p ? 'selected' : ''}>${p}</option>
+                                `).join('')}
+                            </select>
+                            
+                            <label class="block text-sm font-medium mb-2">Station</label>
+                            <select id="stationSelect" onchange="setState({ selectedStation: this.value })" class="w-full p-3 border-2 rounded-lg">
+                                <option value="">Select station</option>
+                                ${state.stations.map(s => `
+                                    <option value="${s.id}" ${state.selectedStation == s.id ? 'selected' : ''}>${s.code} - ${s.name}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-lg font-semibold mb-4">📍 GPS Location</h2>
+                            <button onclick="captureGPS()" class="w-full bg-green-600 text-white p-4 rounded-lg font-semibold">
+                                ${state.loading ? 'Capturing...' : 'Capture GPS Location'}
+                            </button>
+                            ${state.gpsData ? `
+                                <div class="mt-4 bg-blue-50 p-4 rounded-lg text-sm">
+                                    <div class="font-semibold text-green-700">✓ GPS Captured</div>
+                                    <div>Lat: ${state.gpsData.lat.toFixed(6)}</div>
+                                    <div>Lon: ${state.gpsData.lon.toFixed(6)}</div>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        ${renderCandidateSection('Presidential', 'presidential')}
+                        ${renderCandidateSection('Parliamentary', 'parliamentary')}
+                        ${renderCandidateSection('Council', 'council')}
+
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h2 class="text-lg font-semibold mb-4">📸 Photos</h2>
+                            <input type="file" id="photoInput" accept="image/*" capture="environment" onchange="handlePhoto(event)" class="hidden" />
+                            <button onclick="document.getElementById('photoInput').click()" class="w-full bg-green-600 text-white p-4 rounded-lg font-semibold">
+                                Take Photo
+                            </button>
+                            <div class="mt-4 grid grid-cols-2 gap-2">
+                                ${state.photos.map(photo => `<img src="${photo}" class="rounded-lg w-full" />`).join('')}
+                            </div>
+                        </div>
+
+                        ${state.error ? `
+                            <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                                ${state.error}
+                            </div>
+                        ` : ''}
+
+                        <button onclick="submitResults()" class="w-full bg-green-600 text-white p-4 rounded-lg font-semibold text-lg">
+                            ${state.loading ? 'Submitting...' : '✓ Submit All Results'}
+                        </button>
+                        
+                        <button onclick="resetForm(); setState({ screen: 'home' })" class="w-full bg-red-600 text-white p-4 rounded-lg font-semibold">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCandidateSection(title, type) {
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-lg font-semibold mb-4">🏛️ ${title} Results</h2>
+                    ${state[type].map((c, i) => `
+                        <div class="mb-4 p-4 bg-gray-50 rounded-lg">
+                            <input type="text" placeholder="Candidate Name" value="${c.candidate}" 
+                                onchange="updateCandidate('${type}', ${i}, 'candidate', this.value)"
+                                class="w-full p-3 border rounded-lg mb-2" />
+                            <input type="text" placeholder="Party" value="${c.party}"
+                                onchange="updateCandidate('${type}', ${i}, 'party', this.value)"
+                                class="w-full p-3 border rounded-lg mb-2" />
+                            <input type="number" placeholder="Votes" value="${c.votes}"
+                                onchange="updateCandidate('${type}', ${i}, 'votes', this.value)"
+                                class="w-full p-3 border rounded-lg" />
+                        </div>
+                    `).join('')}
+                    <button onclick="addCandidate('${type}')" class="w-full bg-gray-200 text-gray-700 p-3 rounded-lg font-semibold">
+                        + Add Candidate
+                    </button>
+                </div>
+            `;
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            let html = '';
+            
+            switch(state.screen) {
+                case 'login': html = renderLogin(); break;
+                case 'home': html = renderHome(); break;
+                case 'submissions': html = renderSubmissions(); break;
+                case 'submit': html = renderSubmit(); break;
+            }
+            
+            app.innerHTML = html;
+            
+            // Restore input values after render
+            if (state.screen === 'login') {
+                const usernameInput = document.getElementById('username');
+                const passwordInput = document.getElementById('password');
+                if (usernameInput) usernameInput.addEventListener('input', (e) => {
+                    state.credentials.username = e.target.value;
+                });
+                if (passwordInput) passwordInput.addEventListener('input', (e) => {
+                    state.credentials.password = e.target.value;
+                });
+            }
+        }
+
+        // Initial render
+        render();
     </script>
 </body>
 </html>
