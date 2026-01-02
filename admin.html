@@ -801,13 +801,4 @@
                         <p><strong>Observer:</strong> ${data.observer_full_name} (${data.observer_phone})</p>
                         ${data.observer_email ? `<p><strong>Email:</strong> ${data.observer_email}</p>` : ''}
                         ${data.observer_national_id ? `<p><strong>National ID:</strong> ${data.observer_national_id}</p>` : ''}
-                        <p><strong>GPS:</strong> ${data.gps_lat.toFixed(6)}, ${data.gps_lon.toFixed(6)}</p>
-                    </div>
-                `;
-                
-                document.getElementById('detailContent').innerHTML = html;
-                document.getElementById('detailModal').classList.add('show');
-            } catch (error) {
-                alert('Failed to load submission details');
-            }
-        }
+                        <p><strong>GPS:</strong> ${data.gps_lat.toFixed(6)}, ${data.gps_lon.toFixe
