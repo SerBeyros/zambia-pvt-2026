@@ -15,9 +15,16 @@
     <div id="root"></div>
     <script type="text/babel">
         const { useState } = React;
-       
-        // IMPORTANT: Change this to your actual Render backend URL
-        const API_URL = 'https://zambia-pvt-2026.onrender.com/api';
+
+        // API URL Configuration
+        // Auto-detects the backend URL, or you can override by setting window.API_BASE_URL
+        const API_URL = window.API_BASE_URL ||
+                        (window.location.hostname === 'localhost'
+                            ? 'http://localhost:5000/api'
+                            : `${window.location.protocol}//${window.location.host}/api`);
+
+        console.log('Using API URL:', API_URL);
+
         function ZambiaPVTApp() {
           const [screen, setScreen] = useState('login');
           const [token, setToken] = useState(null);

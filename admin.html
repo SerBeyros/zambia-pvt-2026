@@ -285,8 +285,8 @@
         <div class="login-container">
             <div class="card">
                 <h2>Admin Login</h2>
-                <input type="text" id="username" placeholder="Username" value="admin">
-                <input type="password" id="password" placeholder="Password" value="admin2026">
+                <input type="text" id="username" placeholder="Username">
+                <input type="password" id="password" placeholder="Password">
                 <button onclick="login()" style="width: 100%; background: #1e3c72; color: white; padding: 12px;">Login</button>
                 <div id="loginError" style="color: red; margin-top: 10px; font-size: 14px;"></div>
             </div>
@@ -435,9 +435,15 @@
     </div>
 
     <script>
-        // IMPORTANT: Change this to your actual Render backend URL
-        const API_URL = 'https://zambia-pvt-2026.onrender.com/api';
-        
+        // API URL Configuration
+        // Auto-detects the backend URL, or you can override by setting window.API_BASE_URL
+        const API_URL = window.API_BASE_URL ||
+                        (window.location.hostname === 'localhost'
+                            ? 'http://localhost:5000/api'
+                            : `${window.location.protocol}//${window.location.host}/api`);
+
+        console.log('Using API URL:', API_URL);
+
         let token = null;
         let currentUser = null;
         let editingObserverId = null;
@@ -801,4 +807,198 @@
                         <p><strong>Observer:</strong> ${data.observer_full_name} (${data.observer_phone})</p>
                         ${data.observer_email ? `<p><strong>Email:</strong> ${data.observer_email}</p>` : ''}
                         ${data.observer_national_id ? `<p><strong>National ID:</strong> ${data.observer_national_id}</p>` : ''}
-                        <p><strong>GPS:</strong> ${data.gps_lat.toFixed(6)}, ${data.gps_lon.toFixe
+                        <p><strong>GPS:</strong> ${data.gps_lat.toFixed(6)}, ${data.gps_lon.toFixed(6)}</p>
+                        <p><strong>Status:</strong> <span class="status status-${data.status}">${data.status.toUpperCase()}</span></p>
+                        <p><strong>Submitted:</strong> ${new Date(data.submitted_at).toLocaleString()}</p>
+                    </div>
+
+                    <div class="result-section">
+                        <h3>Presidential Results</h3>
+                        ${data.presidential.map(c => `
+                            <div class="result-item">
+                                <strong>${c.candidate}</strong> (${c.party}): ${c.votes.toLocaleString()} votes
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div class="result-section">
+                        <h3>Parliamentary Results</h3>
+                        ${data.parliamentary.map(c => `
+                            <div class="result-item">
+                                <strong>${c.candidate}</strong> (${c.party}): ${c.votes.toLocaleString()} votes
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div class="result-section">
+                        <h3>Council Results</h3>
+                        ${data.council.map(c => `
+                            <div class="result-item">
+                                <strong>${c.candidate}</strong> (${c.party}): ${c.votes.toLocaleString()} votes
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+
+                document.getElementById('detailContent').innerHTML = html;
+                document.getElementById('detailModal').classList.add('show');
+            } catch (error) {
+                alert('Failed to load submission details: ' + error.message);
+            }
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.remove('show');
+        }
+
+        async function approve(id) {
+            if (!confirm('Are you sure you want to approve this submission?')) return;
+
+            try {
+                const res = await fetch(`${API_URL}/submissions/${id}/approve`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.ok) {
+                    alert('✓ Submission approved');
+                    loadPending();
+                    loadStats();
+                } else {
+                    throw new Error('Failed to approve');
+                }
+            } catch (error) {
+                alert('Failed to approve submission');
+            }
+        }
+
+        async function reject(id) {
+            if (!confirm('Are you sure you want to reject this submission?')) return;
+
+            try {
+                const res = await fetch(`${API_URL}/submissions/${id}/reject`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.ok) {
+                    alert('✓ Submission rejected');
+                    loadPending();
+                    loadStats();
+                } else {
+                    throw new Error('Failed to reject');
+                }
+            } catch (error) {
+                alert('Failed to reject submission');
+            }
+        }
+
+        // ==================== RESULTS ====================
+        async function loadResults() {
+            try {
+                const type = document.getElementById('electionType').value;
+                const res = await fetch(`${API_URL}/results?type=${type}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                const chart = document.getElementById('resultsChart');
+
+                if (data.results.length === 0) {
+                    chart.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No results available</p>';
+                    return;
+                }
+
+                const maxVotes = Math.max(...data.results.map(r => r.votes));
+
+                let html = `<div><p style="margin-bottom: 20px;"><strong>Total Votes:</strong> ${data.total_votes.toLocaleString()}</p>`;
+
+                data.results.forEach(result => {
+                    const width = maxVotes > 0 ? (result.votes / maxVotes * 100) : 0;
+                    html += `
+                        <div class="chart-bar">
+                            <div class="chart-label">${result.candidate}<br><small>${result.party}</small></div>
+                            <div class="chart-bar-fill" style="width: ${width}%">
+                                ${result.votes.toLocaleString()} (${result.percentage}%)
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+                chart.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to load results:', error);
+            }
+        }
+
+        // ==================== PROVINCE STATS ====================
+        async function loadProvinceStats() {
+            try {
+                const res = await fetch(`${API_URL}/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                const container = document.getElementById('provinceStats');
+
+                if (data.provinces.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No province data available</p>';
+                    return;
+                }
+
+                let html = '<div style="overflow-x: auto;"><table><tr><th>Province</th><th>Approved Submissions</th></tr>';
+
+                data.provinces.forEach(prov => {
+                    html += `
+                        <tr>
+                            <td><strong>${prov.province}</strong></td>
+                            <td>${prov.count.toLocaleString()}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</table></div>';
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to load province stats:', error);
+            }
+        }
+
+        // ==================== TAB MANAGEMENT ====================
+        function showTab(tabName) {
+            // Hide all tabs
+            document.getElementById('observersTab').classList.add('hidden');
+            document.getElementById('pendingTab').classList.add('hidden');
+            document.getElementById('approvedTab').classList.add('hidden');
+            document.getElementById('resultsTab').classList.add('hidden');
+            document.getElementById('provincesTab').classList.add('hidden');
+
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+
+            // Show selected tab and mark as active
+            if (tabName === 'observers') {
+                document.getElementById('observersTab').classList.remove('hidden');
+                document.querySelectorAll('.tab')[0].classList.add('active');
+            } else if (tabName === 'pending') {
+                document.getElementById('pendingTab').classList.remove('hidden');
+                document.querySelectorAll('.tab')[1].classList.add('active');
+                loadPending();
+            } else if (tabName === 'approved') {
+                document.getElementById('approvedTab').classList.remove('hidden');
+                document.querySelectorAll('.tab')[2].classList.add('active');
+                loadApproved();
+            } else if (tabName === 'results') {
+                document.getElementById('resultsTab').classList.remove('hidden');
+                document.querySelectorAll('.tab')[3].classList.add('active');
+                loadResults();
+            } else if (tabName === 'provinces') {
+                document.getElementById('provincesTab').classList.remove('hidden');
+                document.querySelectorAll('.tab')[4].classList.add('active');
+                loadProvinceStats();
+            }
+        }
+    </script>
+</body>
+</html>
