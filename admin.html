@@ -72,6 +72,7 @@
             gap: 10px;
             border-bottom: 2px solid #e0e0e0;
             margin-bottom: 20px;
+            overflow-x: auto;
         }
         
         .tab {
@@ -83,6 +84,7 @@
             font-size: 15px;
             font-weight: 500;
             border-bottom: 3px solid transparent;
+            white-space: nowrap;
         }
         
         .tab.active {
@@ -93,7 +95,11 @@
         table {
             width: 100%;
             border-collapse: collapse;
+            overflow-x: auto;
+            display: block;
         }
+        
+        thead, tbody { display: table; width: 100%; table-layout: fixed; }
         
         th, td {
             padding: 12px;
@@ -122,6 +128,8 @@
         .status-pending { background: #ffc107; color: #000; }
         .status-approved { background: #28a745; color: white; }
         .status-rejected { background: #dc3545; color: white; }
+        .status-active { background: #28a745; color: white; }
+        .status-inactive { background: #dc3545; color: white; }
         
         button {
             padding: 8px 16px;
@@ -131,14 +139,18 @@
             font-size: 14px;
             font-weight: 500;
             margin-right: 5px;
+            margin-bottom: 5px;
         }
         
+        .btn-primary { background: #1e3c72; color: white; }
         .btn-approve { background: #28a745; color: white; }
         .btn-reject { background: #dc3545; color: white; }
         .btn-view { background: #007bff; color: white; }
+        .btn-edit { background: #ffc107; color: #000; }
         .btn-secondary { background: #6c757d; color: white; }
         
         button:hover { opacity: 0.9; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .hidden { display: none; }
         
@@ -149,20 +161,44 @@
             width: 100%;
             height: 100%;
             background: rgba(0,0,0,0.5);
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             z-index: 1000;
+        }
+        
+        .modal.show {
+            display: flex;
         }
         
         .modal-content {
             background: white;
             padding: 30px;
             border-radius: 10px;
-            max-width: 800px;
+            max-width: 600px;
             max-height: 80vh;
             overflow-y: auto;
             width: 90%;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
         }
         
         .result-section {
@@ -186,7 +222,7 @@
             margin: 100px auto;
         }
         
-        input {
+        input, select {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
@@ -222,6 +258,22 @@
             font-size: 12px;
             font-weight: 600;
         }
+        
+        .alert {
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        
+        @media (max-width: 768px) {
+            .tabs { flex-wrap: nowrap; overflow-x: scroll; }
+            table { font-size: 12px; }
+            th, td { padding: 8px; }
+            button { padding: 6px 12px; font-size: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -244,7 +296,7 @@
     <!-- Main Dashboard -->
     <div id="dashboard" class="hidden">
         <div class="header">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
                 <div>
                     <h1>🗳️ Zambia PVT 2026 - Admin Dashboard</h1>
                     <p id="adminName"></p>
@@ -257,8 +309,8 @@
             <!-- Statistics -->
             <div class="stats-grid">
                 <div class="stat-card">
-                    <h3 id="totalStations">0</h3>
-                    <p>Total Stations</p>
+                    <h3 id="totalObservers">0</h3>
+                    <p>Total Observers</p>
                 </div>
                 <div class="stat-card">
                     <h3 id="totalSubmissions">0</h3>
@@ -272,23 +324,28 @@
                     <h3 id="approvedCount" style="color: #28a745;">0</h3>
                     <p>Approved</p>
                 </div>
-                <div class="stat-card">
-                    <h3 id="coveragePercent">0%</h3>
-                    <p>Coverage</p>
-                </div>
             </div>
 
             <!-- Tabs -->
             <div class="card">
                 <div class="tabs">
-                    <button class="tab active" onclick="showTab('pending')">Pending Submissions</button>
+                    <button class="tab active" onclick="showTab('observers')">Manage Observers</button>
+                    <button class="tab" onclick="showTab('pending')">Pending Submissions</button>
                     <button class="tab" onclick="showTab('approved')">Approved</button>
                     <button class="tab" onclick="showTab('results')">Live Results</button>
                     <button class="tab" onclick="showTab('provinces')">Province Breakdown</button>
                 </div>
 
+                <!-- Observers Tab -->
+                <div id="observersTab">
+                    <button onclick="showCreateObserverModal()" class="btn-primary" style="margin-bottom: 20px;">
+                        + Create New Observer
+                    </button>
+                    <div id="observersList"></div>
+                </div>
+
                 <!-- Pending Submissions -->
-                <div id="pendingTab">
+                <div id="pendingTab" class="hidden">
                     <div id="pendingList"></div>
                 </div>
 
@@ -318,24 +375,74 @@
         </div>
     </div>
 
-    <!-- Detail Modal (Hidden by default) -->
-    <div id="detailModal" class="modal hidden" style="display: none;">
+    <!-- Create/Edit Observer Modal -->
+    <div id="observerModal" class="modal">
         <div class="modal-content">
+            <h2 id="observerModalTitle">Create New Observer</h2>
+            <div id="observerModalAlert"></div>
+            
+            <div class="form-group">
+                <label>Username *</label>
+                <input type="text" id="observerUsername" placeholder="observer123">
+            </div>
+            
+            <div class="form-group">
+                <label>Password *</label>
+                <input type="password" id="observerPassword" placeholder="••••••••">
+            </div>
+            
+            <div class="form-group">
+                <label>Full Name *</label>
+                <input type="text" id="observerFullName" placeholder="John Doe">
+            </div>
+            
+            <div class="form-group">
+                <label>Phone Number *</label>
+                <input type="tel" id="observerPhone" placeholder="+260977123456">
+            </div>
+            
+            <div class="form-group">
+                <label>Email (Optional)</label>
+                <input type="email" id="observerEmail" placeholder="john@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label>National ID (Optional)</label>
+                <input type="text" id="observerNationalId" placeholder="123456/78/9">
+            </div>
+            
+            <div class="form-group">
+                <label>Organization (Optional)</label>
+                <input type="text" id="observerOrganization" placeholder="Electoral Commission">
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                <button onclick="saveObserver()" class="btn-primary" style="flex: 1;">Save Observer</button>
+                <button onclick="closeObserverModal()" class="btn-secondary" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submission Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2 style="margin: 0;">Submission Details</h2>
-                <button onclick="closeModal()" class="btn-secondary">✕ Close</button>
+                <button onclick="closeDetailModal()" class="btn-secondary">✕ Close</button>
             </div>
             <div id="detailContent"></div>
         </div>
     </div>
 
     <script>
-        // IMPORTANT: Use YOUR actual Render backend URL
+        // IMPORTANT: Change this to your actual Render backend URL
         const API_URL = 'https://zambia-pvt-2026.onrender.com/api';
         
         let token = null;
         let currentUser = null;
+        let editingObserverId = null;
 
+        // ==================== LOGIN ====================
         async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -367,7 +474,7 @@
                 document.getElementById('adminName').textContent = currentUser.full_name;
                 
                 loadStats();
-                loadPending();
+                loadObservers();
             } catch (error) {
                 errorEl.textContent = error.message;
             }
@@ -380,6 +487,7 @@
             document.getElementById('dashboard').classList.add('hidden');
         }
 
+        // ==================== STATS ====================
         async function loadStats() {
             try {
                 const res = await fetch(`${API_URL}/stats`, {
@@ -387,16 +495,217 @@
                 });
                 const data = await res.json();
                 
-                document.getElementById('totalStations').textContent = data.total_stations.toLocaleString();
+                document.getElementById('totalObservers').textContent = data.total_observers.toLocaleString();
                 document.getElementById('totalSubmissions').textContent = data.total_submissions.toLocaleString();
                 document.getElementById('pendingCount').textContent = data.pending.toLocaleString();
                 document.getElementById('approvedCount').textContent = data.approved.toLocaleString();
-                document.getElementById('coveragePercent').textContent = data.coverage + '%';
             } catch (error) {
                 console.error('Failed to load stats:', error);
             }
         }
 
+        // ==================== OBSERVER MANAGEMENT ====================
+        async function loadObservers() {
+            try {
+                const res = await fetch(`${API_URL}/observers`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                
+                const list = document.getElementById('observersList');
+                
+                if (data.observers.length === 0) {
+                    list.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No observers yet. Create your first observer account!</p>';
+                    return;
+                }
+                
+                let html = '<div style="overflow-x: auto;"><table><tr><th>Username</th><th>Full Name</th><th>Phone</th><th>Status</th><th>Created</th><th>Actions</th></tr>';
+                
+                data.observers.forEach(obs => {
+                    const status = obs.is_active ? 'active' : 'inactive';
+                    html += `
+                        <tr>
+                            <td><strong>${obs.username}</strong></td>
+                            <td>${obs.full_name}</td>
+                            <td>${obs.phone}</td>
+                            <td><span class="status status-${status}">${status.toUpperCase()}</span></td>
+                            <td>${new Date(obs.created_at).toLocaleDateString()}</td>
+                            <td>
+                                <button class="btn-edit" onclick="editObserver(${obs.id})">Edit</button>
+                                ${obs.is_active ? 
+                                    `<button class="btn-reject" onclick="deactivateObserver(${obs.id})">Deactivate</button>` :
+                                    `<button class="btn-approve" onclick="activateObserver(${obs.id})">Activate</button>`
+                                }
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</table></div>';
+                list.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to load observers:', error);
+            }
+        }
+
+        function showCreateObserverModal() {
+            editingObserverId = null;
+            document.getElementById('observerModalTitle').textContent = 'Create New Observer';
+            document.getElementById('observerUsername').value = '';
+            document.getElementById('observerPassword').value = '';
+            document.getElementById('observerFullName').value = '';
+            document.getElementById('observerPhone').value = '';
+            document.getElementById('observerEmail').value = '';
+            document.getElementById('observerNationalId').value = '';
+            document.getElementById('observerOrganization').value = '';
+            document.getElementById('observerModalAlert').innerHTML = '';
+            document.getElementById('observerUsername').disabled = false;
+            document.getElementById('observerModal').classList.add('show');
+        }
+
+        async function editObserver(id) {
+            editingObserverId = id;
+            document.getElementById('observerModalTitle').textContent = 'Edit Observer';
+            
+            try {
+                const res = await fetch(`${API_URL}/observers`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                const observer = data.observers.find(o => o.id === id);
+                
+                if (observer) {
+                    document.getElementById('observerUsername').value = observer.username;
+                    document.getElementById('observerUsername').disabled = true;
+                    document.getElementById('observerPassword').value = '';
+                    document.getElementById('observerPassword').placeholder = 'Leave blank to keep current password';
+                    document.getElementById('observerFullName').value = observer.full_name;
+                    document.getElementById('observerPhone').value = observer.phone;
+                    document.getElementById('observerEmail').value = observer.email || '';
+                    document.getElementById('observerNationalId').value = observer.national_id || '';
+                    document.getElementById('observerOrganization').value = observer.organization || '';
+                    document.getElementById('observerModalAlert').innerHTML = '';
+                    document.getElementById('observerModal').classList.add('show');
+                }
+            } catch (error) {
+                alert('Failed to load observer details');
+            }
+        }
+
+        async function saveObserver() {
+            const alertEl = document.getElementById('observerModalAlert');
+            alertEl.innerHTML = '';
+            
+            const username = document.getElementById('observerUsername').value;
+            const password = document.getElementById('observerPassword').value;
+            const full_name = document.getElementById('observerFullName').value;
+            const phone = document.getElementById('observerPhone').value;
+            const email = document.getElementById('observerEmail').value;
+            const national_id = document.getElementById('observerNationalId').value;
+            const organization = document.getElementById('observerOrganization').value;
+            
+            if (!full_name || !phone) {
+                alertEl.innerHTML = '<div class="alert alert-error">Full name and phone are required</div>';
+                return;
+            }
+            
+            if (!editingObserverId && !username) {
+                alertEl.innerHTML = '<div class="alert alert-error">Username is required</div>';
+                return;
+            }
+            
+            if (!editingObserverId && !password) {
+                alertEl.innerHTML = '<div class="alert alert-error">Password is required for new observers</div>';
+                return;
+            }
+            
+            try {
+                const body = { full_name, phone, email, national_id, organization };
+                
+                if (!editingObserverId) {
+                    body.username = username;
+                    body.password = password;
+                }
+                
+                if (editingObserverId && password) {
+                    body.password = password;
+                }
+                
+                const url = editingObserverId ? 
+                    `${API_URL}/observers/${editingObserverId}` : 
+                    `${API_URL}/observers`;
+                
+                const method = editingObserverId ? 'PUT' : 'POST';
+                
+                const res = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await res.json();
+                
+                if (!res.ok) throw new Error(data.error || 'Failed to save observer');
+                
+                closeObserverModal();
+                loadObservers();
+                loadStats();
+                alert(editingObserverId ? '✓ Observer updated successfully' : '✓ Observer created successfully');
+            } catch (error) {
+                alertEl.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        function closeObserverModal() {
+            document.getElementById('observerModal').classList.remove('show');
+            document.getElementById('observerUsername').disabled = false;
+            document.getElementById('observerPassword').placeholder = '••••••••';
+        }
+
+        async function deactivateObserver(id) {
+            if (!confirm('Are you sure you want to deactivate this observer?')) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/observers/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    alert('✓ Observer deactivated');
+                    loadObservers();
+                    loadStats();
+                }
+            } catch (error) {
+                alert('Failed to deactivate observer');
+            }
+        }
+
+        async function activateObserver(id) {
+            try {
+                const res = await fetch(`${API_URL}/observers/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ is_active: true })
+                });
+                
+                if (res.ok) {
+                    alert('✓ Observer activated');
+                    loadObservers();
+                    loadStats();
+                }
+            } catch (error) {
+                alert('Failed to activate observer');
+            }
+        }
+
+        // ==================== SUBMISSIONS ====================
         async function loadPending() {
             try {
                 const res = await fetch(`${API_URL}/submissions?status=pending`, {
@@ -411,14 +720,14 @@
                     return;
                 }
                 
-                let html = '<table><tr><th>Station</th><th>Province</th><th>Observer</th><th>Submitted</th><th>Actions</th></tr>';
+                let html = '<div style="overflow-x: auto;"><table><tr><th>Polling Station</th><th>Location</th><th>Observer</th><th>Submitted</th><th>Actions</th></tr>';
                 
                 data.submissions.forEach(sub => {
                     html += `
                         <tr>
-                            <td><strong>${sub.code}</strong><br><small>${sub.name}</small></td>
-                            <td>${sub.province}<br><small>${sub.district}</small></td>
-                            <td>${sub.observer_name}<br><small>${sub.observer_phone}</small></td>
+                            <td><strong>${sub.polling_station}</strong></td>
+                            <td>${sub.ward}, ${sub.constituency}<br><small>${sub.district}, ${sub.province}</small></td>
+                            <td>${sub.observer_full_name}<br><small>${sub.observer_phone}</small></td>
                             <td>${new Date(sub.submitted_at).toLocaleString()}</td>
                             <td>
                                 <button class="btn-view" onclick="viewDetails(${sub.id})">View</button>
@@ -429,7 +738,7 @@
                     `;
                 });
                 
-                html += '</table>';
+                html += '</table></div>';
                 list.innerHTML = html;
             } catch (error) {
                 console.error('Failed to load pending:', error);
@@ -450,21 +759,21 @@
                     return;
                 }
                 
-                let html = '<table><tr><th>Station</th><th>Province</th><th>Observer</th><th>Approved</th><th>Actions</th></tr>';
+                let html = '<div style="overflow-x: auto;"><table><tr><th>Polling Station</th><th>Location</th><th>Observer</th><th>Approved</th><th>Actions</th></tr>';
                 
                 data.submissions.forEach(sub => {
                     html += `
                         <tr>
-                            <td><strong>${sub.code}</strong><br><small>${sub.name}</small></td>
-                            <td>${sub.province}<br><small>${sub.district}</small></td>
-                            <td>${sub.observer_name}</td>
+                            <td><strong>${sub.polling_station}</strong></td>
+                            <td>${sub.ward}, ${sub.constituency}<br><small>${sub.district}, ${sub.province}</small></td>
+                            <td>${sub.observer_full_name}</td>
                             <td>${new Date(sub.approved_at || sub.submitted_at).toLocaleString()}</td>
                             <td><button class="btn-view" onclick="viewDetails(${sub.id})">View Details</button></td>
                         </tr>
                     `;
                 });
                 
-                html += '</table>';
+                html += '</table></div>';
                 list.innerHTML = html;
             } catch (error) {
                 console.error('Failed to load approved:', error);
@@ -480,207 +789,25 @@
                     }
                 });
                 
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 
                 const data = await res.json();
-                console.log('Submission data:', data); // Debug log
                 
                 let html = `
                     <div style="margin-bottom: 20px;">
-                        <p><strong>Station:</strong> ${data.code} - ${data.name}</p>
+                        <p><strong>Polling Station:</strong> ${data.polling_station}</p>
                         <p><strong>Location:</strong> ${data.ward}, ${data.constituency}, ${data.district}, ${data.province}</p>
-                        <p><strong>Observer:</strong> ${data.observer_name} (${data.observer_phone})</p>
+                        ${data.town ? `<p><strong>Town/Area:</strong> ${data.town}</p>` : ''}
+                        <p><strong>Observer:</strong> ${data.observer_full_name} (${data.observer_phone})</p>
+                        ${data.observer_email ? `<p><strong>Email:</strong> ${data.observer_email}</p>` : ''}
+                        ${data.observer_national_id ? `<p><strong>National ID:</strong> ${data.observer_national_id}</p>` : ''}
                         <p><strong>GPS:</strong> ${data.gps_lat.toFixed(6)}, ${data.gps_lon.toFixed(6)}</p>
-                        <p><strong>Status:</strong> <span class="status status-${data.status}">${data.status.toUpperCase()}</span></p>
-                        <p><strong>Submitted:</strong> ${new Date(data.submitted_at).toLocaleString()}</p>
                     </div>
-                    
-                    <div class="result-section">
-                        <h3>🏛️ Presidential Results</h3>
-                        ${data.presidential && data.presidential.length > 0 ? data.presidential.map(c => `
-                            <div class="result-item">
-                                <strong>${c.candidate}</strong> (${c.party}): <strong>${c.votes.toLocaleString()} votes</strong>
-                            </div>
-                        `).join('') : '<p>No presidential results</p>'}
-                    </div>
-                    
-                    <div class="result-section">
-                        <h3>🏢 Parliamentary Results</h3>
-                        ${data.parliamentary && data.parliamentary.length > 0 ? data.parliamentary.map(c => `
-                            <div class="result-item">
-                                <strong>${c.candidate}</strong> (${c.party}): <strong>${c.votes.toLocaleString()} votes</strong>
-                            </div>
-                        `).join('') : '<p>No parliamentary results</p>'}
-                    </div>
-                    
-                    <div class="result-section">
-                        <h3>🏙️ Council Results</h3>
-                        ${data.council && data.council.length > 0 ? data.council.map(c => `
-                            <div class="result-item">
-                                <strong>${c.candidate}</strong> (${c.party}): <strong>${c.votes.toLocaleString()} votes</strong>
-                            </div>
-                        `).join('') : '<p>No council results</p>'}
-                    </div>
-                    
-                    ${data.photos && data.photos.length > 0 ? `
-                        <div class="result-section">
-                            <h3>📸 Photos</h3>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
-                                ${data.photos.map(photo => `
-                                    <img src="${photo}" style="width: 100%; border-radius: 5px; border: 1px solid #e0e0e0;" />
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
                 `;
                 
                 document.getElementById('detailContent').innerHTML = html;
-                const modal = document.getElementById('detailModal');
-                modal.classList.remove('hidden');
-                modal.style.display = 'flex';
+                document.getElementById('detailModal').classList.add('show');
             } catch (error) {
-                console.error('Failed to load details:', error);
-                alert('Failed to load details: ' + error.message);
-                closeModal();
+                alert('Failed to load submission details');
             }
         }
-
-        function closeModal() {
-            const modal = document.getElementById('detailModal');
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
-        
-        // Ensure modal is closed on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            closeModal();
-        });
-
-        async function approve(id) {
-            if (!confirm('Approve this submission?')) return;
-            
-            try {
-                const res = await fetch(`${API_URL}/submissions/${id}/approve`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (res.ok) {
-                    alert('✓ Approved successfully');
-                    loadStats();
-                    loadPending();
-                }
-            } catch (error) {
-                alert('Failed to approve');
-            }
-        }
-
-        async function reject(id) {
-            if (!confirm('Reject this submission?')) return;
-            
-            try {
-                const res = await fetch(`${API_URL}/submissions/${id}/reject`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (res.ok) {
-                    alert('✓ Rejected');
-                    loadStats();
-                    loadPending();
-                }
-            } catch (error) {
-                alert('Failed to reject');
-            }
-        }
-
-        async function loadResults() {
-            const type = document.getElementById('electionType').value;
-            
-            try {
-                const res = await fetch(`${API_URL}/results?type=${type}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await res.json();
-                
-                const container = document.getElementById('resultsChart');
-                
-                if (data.results.length === 0) {
-                    container.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No results yet</p>';
-                    return;
-                }
-                
-                const maxVotes = Math.max(...data.results.map(r => r.votes));
-                
-                let html = `<p style="margin-bottom: 20px;"><strong>Total Votes:</strong> ${data.total_votes.toLocaleString()}</p>`;
-                
-                data.results.forEach(result => {
-                    const width = (result.votes / maxVotes * 100).toFixed(1);
-                    html += `
-                        <div class="chart-bar">
-                            <div class="chart-label">${result.candidate}<br><small>${result.party}</small></div>
-                            <div class="chart-bar-fill" style="width: ${width}%;">
-                                ${result.votes.toLocaleString()} (${result.percentage}%)
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                container.innerHTML = html;
-            } catch (error) {
-                console.error('Failed to load results:', error);
-            }
-        }
-
-        async function loadProvinces() {
-            try {
-                const res = await fetch(`${API_URL}/stats`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await res.json();
-                
-                const container = document.getElementById('provinceStats');
-                
-                let html = '<table><tr><th>Province</th><th>Approved Submissions</th></tr>';
-                
-                data.provinces.forEach(prov => {
-                    html += `
-                        <tr>
-                            <td><strong>${prov.province}</strong></td>
-                            <td>${prov.count.toLocaleString()}</td>
-                        </tr>
-                    `;
-                });
-                
-                html += '</table>';
-                container.innerHTML = html;
-            } catch (error) {
-                console.error('Failed to load provinces:', error);
-            }
-        }
-
-        function showTab(tab) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('[id$="Tab"]').forEach(t => t.classList.add('hidden'));
-            
-            event.target.classList.add('active');
-            
-            if (tab === 'pending') {
-                document.getElementById('pendingTab').classList.remove('hidden');
-                loadPending();
-            } else if (tab === 'approved') {
-                document.getElementById('approvedTab').classList.remove('hidden');
-                loadApproved();
-            } else if (tab === 'results') {
-                document.getElementById('resultsTab').classList.remove('hidden');
-                loadResults();
-            } else if (tab === 'provinces') {
-                document.getElementById('provincesTab').classList.remove('hidden');
-                loadProvinces();
-            }
-        }
-    </script>
-</body>
-</html>
